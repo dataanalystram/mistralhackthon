@@ -22,6 +22,66 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '2.1.0' });
 });
 
+// Skill Library — list installed skills from .vibe/skills/
+app.get('/api/skills', (req, res) => {
+  const skillsDir = join(PROJECT_ROOT, '.vibe', 'skills');
+  if (!existsSync(skillsDir)) return res.json({ skills: [] });
+
+  try {
+    const skills = readdirSync(skillsDir)
+      .filter(d => statSync(join(skillsDir, d)).isDirectory())
+      .map(id => {
+        const skillMdPath = join(skillsDir, id, 'SKILL.md');
+        let skillMd = '';
+        try { skillMd = readFileSync(skillMdPath, 'utf8'); } catch { }
+
+        // Parse SKILL.md frontmatter
+        const nameMatch = skillMd.match(/name:\s*(.+)/);
+        const descMatch = skillMd.match(/description:\s*(.+)/);
+
+        // List files in skill dir
+        const files = [];
+        const listFiles = (dir, prefix = '') => {
+          try {
+            readdirSync(dir).forEach(f => {
+              const fp = join(dir, f);
+              if (statSync(fp).isDirectory()) {
+                listFiles(fp, prefix + f + '/');
+              } else {
+                files.push({ path: prefix + f, size: statSync(fp).size });
+              }
+            });
+          } catch { }
+        };
+        listFiles(join(skillsDir, id));
+
+        return {
+          id,
+          name: nameMatch ? nameMatch[1].trim() : id,
+          description: descMatch ? descMatch[1].trim() : '',
+          path: `.vibe/skills/${id}/`,
+          files,
+          skill_md: skillMd
+        };
+      });
+    res.json({ skills, count: skills.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get a specific skill's file content
+app.get('/api/skills/:id/files/:file(*)', (req, res) => {
+  const filePath = join(PROJECT_ROOT, '.vibe', 'skills', req.params.id, req.params.file);
+  if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    res.json({ path: req.params.file, content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/analyze-repo — Analyze a codebase and suggest skills
 app.post('/api/analyze-repo', async (req, res) => {
   const repoRoot = req.body.repo_root || join(PROJECT_ROOT, 'demo-repo');

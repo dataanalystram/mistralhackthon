@@ -49,17 +49,6 @@ export const SKILLSPEC_SCHEMA = {
                 }
             }
         },
-        "success_checks": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["type", "criteria"],
-                "properties": {
-                    "type": { "type": "string", "enum": ["tests_pass", "command_exit_0", "file_contains", "diff_nonempty"] },
-                    "criteria": { "type": "object" }
-                }
-            }
-        },
         "fallback_plan": {
             "type": "object",
             "properties": {

@@ -86,6 +86,9 @@ router.post('/:id/skillspec', async (req, res) => {
 
         const validation = validateSkillSpec(skillSpec);
         if (!validation.valid) {
+            console.error('❌ SkillSpec validation failed:');
+            console.error(validation.errors);
+            console.error('Raw SkillSpec:', JSON.stringify(skillSpec, null, 2));
             return res.status(422).json({ error: 'SkillSpec validation failed', details: validation.errors, skillSpec });
         }
 

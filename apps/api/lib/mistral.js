@@ -53,9 +53,6 @@ Given a user's spoken intent, produce a JSON object matching this EXACT schema:
       "on_fail": "continue | stop"
     }
   ],
-  "success_checks": [
-    { "type": "tests_pass", "criteria": { "command": "npm test" } }
-  ],
   "fallback_plan": {
     "use_golden_path": true,
     "golden_path_id": "same as skill_id"
