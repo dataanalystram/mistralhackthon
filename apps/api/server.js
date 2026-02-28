@@ -81,47 +81,6 @@ app.get('/api/skills/:id/files/:file(*)', (req, res) => {
   }
 });
 
-// POST /api/transcribe — Voxtral voice transcription
-app.post('/api/transcribe', async (req, res) => {
-  const { audio } = req.body;
-  if (!audio) return res.status(400).json({ error: 'audio (base64) is required' });
-
-  const apiKey = process.env.MISTRAL_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'MISTRAL_API_KEY not configured' });
-
-  try {
-    const client = new Mistral({ apiKey });
-
-    // Use Voxtral Mini for transcription via chat completions
-    const response = await client.chat.complete({
-      model: 'voxtral-mini-latest',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'input_audio',
-              inputAudio: audio
-            },
-            {
-              type: 'text',
-              text: 'Transcribe this audio exactly. Output ONLY the transcribed text, nothing else.'
-            }
-          ]
-        }
-      ],
-      temperature: 0.1,
-      maxTokens: 500
-    });
-
-    const transcript = response.choices[0].message.content.trim();
-    console.log('🎤 Voxtral transcription:', transcript.slice(0, 100) + '...');
-    res.json({ transcript, model: 'voxtral-mini-latest' });
-  } catch (err) {
-    console.error('Voxtral transcription error:', err.message);
-    res.status(500).json({ error: 'Transcription failed: ' + err.message });
-  }
-});
 
 // Session routes
 app.use('/api/sessions', sessionsRouter);
