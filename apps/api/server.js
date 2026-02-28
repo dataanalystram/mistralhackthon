@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
+import { Mistral } from '@mistralai/mistralai';
 import sessionsRouter from './routes/sessions.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../.env') });
@@ -13,7 +14,7 @@ const PORT = process.env.API_PORT || 3001;
 const PROJECT_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 app.use(cors({ origin: '*' }));
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -80,11 +81,53 @@ app.get('/api/skills/:id/files/:file(*)', (req, res) => {
   }
 });
 
+// POST /api/transcribe — Voxtral voice transcription
+app.post('/api/transcribe', async (req, res) => {
+  const { audio } = req.body;
+  if (!audio) return res.status(400).json({ error: 'audio (base64) is required' });
+
+  const apiKey = process.env.MISTRAL_API_KEY;
+  if (!apiKey) return res.status(500).json({ error: 'MISTRAL_API_KEY not configured' });
+
+  try {
+    const client = new Mistral({ apiKey });
+
+    // Use Voxtral Mini for transcription via chat completions
+    const response = await client.chat.complete({
+      model: 'voxtral-mini-latest',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_audio',
+              inputAudio: audio
+            },
+            {
+              type: 'text',
+              text: 'Transcribe this audio exactly. Output ONLY the transcribed text, nothing else.'
+            }
+          ]
+        }
+      ],
+      temperature: 0.1,
+      maxTokens: 500
+    });
+
+    const transcript = response.choices[0].message.content.trim();
+    console.log('🎤 Voxtral transcription:', transcript.slice(0, 100) + '...');
+    res.json({ transcript, model: 'voxtral-mini-latest' });
+  } catch (err) {
+    console.error('Voxtral transcription error:', err.message);
+    res.status(500).json({ error: 'Transcription failed: ' + err.message });
+  }
+});
+
 // Session routes
 app.use('/api/sessions', sessionsRouter);
 
 app.listen(PORT, () => {
-  console.log(`🔥 VibeForge API v1.1.0 running on http://localhost:${PORT}`);
+  console.log(`🔥 VibeForge API v2.0.0 running on http://localhost:${PORT}`);
   console.log(`   Health: http://localhost:${PORT}/api/health`);
   console.log(`   Skills: http://localhost:${PORT}/api/skills`);
   console.log(`   Mistral API Key: ${process.env.MISTRAL_API_KEY ? '✅ Set' : '❌ Missing — set MISTRAL_API_KEY in .env'}`);
