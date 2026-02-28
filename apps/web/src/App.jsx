@@ -19,6 +19,8 @@ function App() {
     const [activeTab, setActiveTab] = useState('preview');
     const [patchedFile, setPatchedFile] = useState(null);
     const [repoPath, setRepoPath] = useState('');
+    const [suggestions, setSuggestions] = useState([]);
+    const [analyzing, setAnalyzing] = useState(false);
 
     const logEndRef = useRef(null);
 
@@ -37,6 +39,23 @@ function App() {
 
     const addLog = (type, message) => {
         setLogs(prev => [...prev, { time: new Date().toISOString().slice(11, 19), type, message }]);
+    };
+
+    const analyzeRepoAction = async () => {
+        try {
+            setAnalyzing(true);
+            setSuggestions([]);
+            addLog('info', '🔍 Analyzing codebase context with Mistral Large...');
+            const body = repoPath.trim() ? { repo_root: repoPath.trim() } : {};
+            const data = await api('/analyze-repo', body);
+            setSuggestions(data.suggestions || []);
+            addLog('info', `✅ Generated ${data.suggestions?.length || 0} codebase-aware suggestions`);
+        } catch (err) {
+            setError(err.message);
+            addLog('error', '❌ Codebase analysis failed: ' + err.message);
+        } finally {
+            setAnalyzing(false);
+        }
     };
 
     const generateSkillSpecAction = async () => {
@@ -84,7 +103,8 @@ function App() {
         try {
             setLoading('install'); setError(null);
             addLog('step', '▶ Installing skill to .vibe/skills/...');
-            const data = await api(`/sessions/${sessionId}/skill/install`, {});
+            const body = repoPath.trim() ? { repo_root: repoPath.trim() } : {};
+            const data = await api(`/sessions/${sessionId}/skill/install`, body);
             setInstalled(true);
             addLog('info', `✅ Installed to ${data.install_path}`);
             data.installed_files.forEach(f => addLog('stdout', `  ✓ ${f}`));
@@ -176,16 +196,32 @@ function App() {
                     <div className="panel-body">
                         {/* Repo Path */}
                         <div style={{ marginBottom: '12px' }}>
-                            <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '6px' }}>Target Repository</label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '1px' }}>Target Repository</label>
+                                <button className="btn btn-secondary" onClick={analyzeRepoAction} disabled={analyzing} style={{ padding: '2px 8px', fontSize: '10px' }}>
+                                    {analyzing ? '⏳ Analyzing...' : '🔍 Analyze Codebase'}
+                                </button>
+                            </div>
                             <input type="text" value={repoPath} onChange={(e) => setRepoPath(e.target.value)}
                                 placeholder="Leave empty for demo-repo • Or enter: /path/to/your/project"
                                 style={{ width: '100%', padding: '10px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg-glass)', fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-primary)', outline: 'none' }}
                             />
                         </div>
 
+                        {suggestions.length > 0 && (
+                            <div style={{ marginBottom: '12px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {suggestions.map((s, i) => (
+                                    <button key={i} onClick={() => setTranscript(s.command)}
+                                        style={{ background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: 'var(--accent-secondary)', padding: '6px 10px', borderRadius: 'var(--radius-full)', fontSize: '11px', cursor: 'pointer', transition: 'all 0.2s', textAlign: 'left' }}>
+                                        ✨ {s.title}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+
                         <textarea className="transcript-area" value={transcript} onChange={(e) => setTranscript(e.target.value)}
                             placeholder={"Type your command here...\n\nExamples:\n• Create /fix-ci that runs tests, finds failures, patches code, reruns tests\n• Create /ship-demo that runs tests and generates release notes\n• Create /lint-fix that runs eslint --fix on all JS files"}
-                            style={{ height: 'calc(100% - 130px)' }}
+                            style={{ height: suggestions.length > 0 ? 'calc(100% - 170px)' : 'calc(100% - 130px)' }}
                         />
 
                         <div className="golden-toggle" style={{ marginTop: 'auto' }}>

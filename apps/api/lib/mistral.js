@@ -185,3 +185,57 @@ RULES:
         throw new Error('Failed to parse skill code JSON from Codestral response');
     }
 }
+
+/**
+ * Generate context-aware skill suggestions based on codebase metadata.
+ * Uses Mistral Large to analyze package.json, README, and file tree.
+ */
+export async function analyzeRepo(repoContext) {
+    const mistral = getClient();
+
+    const systemPrompt = `You are VibeForge's Context-Aware Suggestion Engine.
+Given a summary of a user's repository, suggest 3 highly personalized, strictly actionable AI Skills that could be generated to automate tasks in THEIR specific codebase.
+
+Output ONLY a JSON object with this exact structure:
+{
+  "suggestions": [
+    {
+      "title": "string (Short, punchy title, e.g., 'Lint & Fix Code')",
+      "command": "string (The exact transcript command the user should use to generate the skill, e.g., 'Create /lint-fix that runs eslint --fix on all files')"
+    }
+  ]
+}
+
+RULES:
+1. ONLY suggest 3 skills.
+2. The 'command' property must read like a prompt the user can directly send to VibeForge to generate the skill (start it with "Create /<skillname> that...").
+3. Tailor suggestions to the tech stack (e.g. if you see Jest in package.json, suggest a test runner skill. If you see Dockerfile, suggest a build skill).
+4. Output strictly valid JSON.`;
+
+    const userMessage = `Repository Context:
+${repoContext.files_preview ? `Root files: ${repoContext.files_preview.join(', ')}` : 'No files listed.'}
+${repoContext.package_json ? `Dependencies: ${JSON.stringify(repoContext.package_json.dependencies || {})}\nDevDependencies: ${JSON.stringify(repoContext.package_json.devDependencies || {})}` : 'No package.json found.'}
+${repoContext.readme_preview ? `README Extract: ${repoContext.readme_preview}` : 'No README.'}
+
+Analyze this context and suggest 3 specialized VibeForge skills.`;
+
+    const response = await mistral.chat.complete({
+        model: SKILLSPEC_MODEL,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+        ],
+        responseFormat: { type: 'json_object' },
+        temperature: 0.5,
+        maxTokens: 1000
+    });
+
+    const content = response.choices[0].message.content;
+
+    try {
+        const result = JSON.parse(content);
+        return result.suggestions || [];
+    } catch (e) {
+        throw new Error('Failed to parse analysis JSON from Mistral response');
+    }
+}

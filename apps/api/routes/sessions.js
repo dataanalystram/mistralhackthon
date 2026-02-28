@@ -167,8 +167,9 @@ router.post('/:id/skill/install', async (req, res) => {
         return res.status(400).json({ error: 'Generate skill files first' });
     }
 
+    const repoRoot = req.body.repo_root || join(PROJECT_ROOT, 'demo-repo');
     const skillId = session.skillSpec.skill_id;
-    const installBase = join(PROJECT_ROOT, '.vibe', 'skills', skillId);
+    const installBase = join(repoRoot, '.vibe', 'skills', skillId);
 
     try {
         const installed = [];

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
 import { Mistral } from '@mistralai/mistralai';
+import { analyzeRepo } from './lib/mistral.js';
 import sessionsRouter from './routes/sessions.js';
 
 dotenv.config({ path: join(dirname(fileURLToPath(import.meta.url)), '../../.env') });
@@ -18,69 +19,50 @@ app.use(express.json({ limit: '25mb' }));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '1.1.0' });
+  res.json({ status: 'ok', timestamp: new Date().toISOString(), version: '2.1.0' });
 });
 
-// Skill Library — list installed skills from .vibe/skills/
-app.get('/api/skills', (req, res) => {
-  const skillsDir = join(PROJECT_ROOT, '.vibe', 'skills');
-  if (!existsSync(skillsDir)) return res.json({ skills: [] });
+// POST /api/analyze-repo — Analyze a codebase and suggest skills
+app.post('/api/analyze-repo', async (req, res) => {
+  const repoRoot = req.body.repo_root || join(PROJECT_ROOT, 'demo-repo');
+
+  if (!existsSync(repoRoot)) {
+    return res.status(404).json({ error: 'Repository path not found' });
+  }
 
   try {
-    const skills = readdirSync(skillsDir)
-      .filter(d => statSync(join(skillsDir, d)).isDirectory())
-      .map(id => {
-        const skillMdPath = join(skillsDir, id, 'SKILL.md');
-        let skillMd = '';
-        try { skillMd = readFileSync(skillMdPath, 'utf8'); } catch { }
+    const repoContext = { files_preview: [], package_json: null, readme_preview: '' };
 
-        // Parse SKILL.md frontmatter
-        const nameMatch = skillMd.match(/name:\s*(.+)/);
-        const descMatch = skillMd.match(/description:\s*(.+)/);
+    // 1. Get root directory file list
+    try {
+      repoContext.files_preview = readdirSync(repoRoot).slice(0, 50); // cap at 50 files
+    } catch (e) { }
 
-        // List files in skill dir
-        const files = [];
-        const listFiles = (dir, prefix = '') => {
-          try {
-            readdirSync(dir).forEach(f => {
-              const fp = join(dir, f);
-              if (statSync(fp).isDirectory()) {
-                listFiles(fp, prefix + f + '/');
-              } else {
-                files.push({ path: prefix + f, size: statSync(fp).size });
-              }
-            });
-          } catch { }
-        };
-        listFiles(join(skillsDir, id));
+    // 2. Read package.json if it exists
+    const pkgPath = join(repoRoot, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const pkgStr = readFileSync(pkgPath, 'utf8');
+        repoContext.package_json = JSON.parse(pkgStr);
+      } catch (e) { }
+    }
 
-        return {
-          id,
-          name: nameMatch ? nameMatch[1].trim() : id,
-          description: descMatch ? descMatch[1].trim() : '',
-          path: `.vibe/skills/${id}/`,
-          files,
-          skill_md: skillMd
-        };
-      });
-    res.json({ skills, count: skills.length });
+    // 3. Read README preview if it exists
+    const readmePath = join(repoRoot, 'README.md');
+    if (existsSync(readmePath)) {
+      try {
+        repoContext.readme_preview = readFileSync(readmePath, 'utf8').slice(0, 1000); // First 1000 chars
+      } catch (e) { }
+    }
+
+    // Ask Mistral Large for 3 skill suggestions
+    const suggestions = await analyzeRepo(repoContext);
+    res.json({ suggestions });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Codebase analysis error:', err.message);
+    res.status(500).json({ error: 'Failed to analyze repository: ' + err.message });
   }
 });
-
-// Get a specific skill's file content
-app.get('/api/skills/:id/files/:file(*)', (req, res) => {
-  const filePath = join(PROJECT_ROOT, '.vibe', 'skills', req.params.id, req.params.file);
-  if (!existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
-  try {
-    const content = readFileSync(filePath, 'utf8');
-    res.json({ path: req.params.file, content });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 
 // Session routes
 app.use('/api/sessions', sessionsRouter);
