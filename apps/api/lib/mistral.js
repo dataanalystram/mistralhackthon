@@ -1,11 +1,20 @@
+// Mistral AI client — SkillSpec generation (Mistral Large) + Code generation (Codestral)
 import { Mistral } from '@mistralai/mistralai';
+
+// Model IDs from https://docs.mistral.ai/getting-started/models
+// SkillSpec generation → Mistral Large (best for structured JSON reasoning)
+const SKILLSPEC_MODEL = 'mistral-large-latest';
+// Code generation → Codestral (specialized for code tasks, 256k context)
+const CODEGEN_MODEL = 'codestral-latest';
 
 let client = null;
 
 function getClient() {
     if (!client) {
         const apiKey = process.env.MISTRAL_API_KEY;
-        if (!apiKey) throw new Error('MISTRAL_API_KEY not set in environment');
+        if (!apiKey || apiKey === 'your_mistral_api_key_here') {
+            throw new Error('MISTRAL_API_KEY not set in .env');
+        }
         client = new Mistral({ apiKey });
     }
     return client;
@@ -13,20 +22,21 @@ function getClient() {
 
 /**
  * Generate a SkillSpec JSON from a user transcript.
- * Uses Mistral Large 3 with JSON output mode.
+ * Uses Mistral Large with json_object response format for strict structured output.
  */
 export async function generateSkillSpec(transcript) {
-    const c = getClient();
+    const mistral = getClient();
 
-    const systemPrompt = `You are a SkillSpec generator for VibeForge. Given a user's spoken intent, produce a valid SkillSpec JSON object.
+    const systemPrompt = `You are VibeForge — a system that converts user voice commands into structured Agent Skill specifications.
 
-The SkillSpec must follow this exact structure:
+Given a user's spoken intent, produce a JSON object matching this EXACT schema:
+
 {
-  "skill_id": "lowercase-hyphenated-name (3-64 chars)",
-  "invocation": "/slash-command-name",
-  "title": "Short title (max 80 chars)",
-  "description": "What this skill does (max 500 chars)",
-  "risk_level": "low" | "medium" | "high",
+  "skill_id": "string (kebab-case, e.g. fix-ci)",
+  "invocation": "string (slash command, e.g. /fix-ci)",
+  "title": "string (human-readable title)",
+  "description": "string (1-2 sentence description)",
+  "risk_level": "low | medium | high",
   "allowed_tools": ["bash", "read_file", "write_file", "grep", "git"],
   "allowed_paths": {
     "read_roots": ["."],
@@ -35,12 +45,12 @@ The SkillSpec must follow this exact structure:
   },
   "steps": [
     {
-      "step_id": "step-name",
-      "name": "Human-readable step description",
+      "step_id": "string (kebab-case)",
+      "name": "string (human-readable step name)",
       "tool": "bash",
-      "args": { "command": "the actual command to run" },
+      "args": { "command": "string (the shell command)" },
       "requires_confirmation": false,
-      "on_fail": "stop"
+      "on_fail": "continue | stop"
     }
   ],
   "success_checks": [
@@ -48,90 +58,130 @@ The SkillSpec must follow this exact structure:
   ],
   "fallback_plan": {
     "use_golden_path": true,
-    "golden_path_id": "skill-name"
+    "golden_path_id": "same as skill_id"
   },
-  "notes_for_humans": "Optional notes"
+  "notes_for_humans": "string (brief explanation)"
 }
 
-Rules:
-- skill_id must be lowercase with hyphens only
-- invocation must start with /
-- steps must be concrete executable commands
-- risk_level should be "medium" if any write operations or bash commands are involved
-- Always include sensible deny_globs for safety
-- Return ONLY the JSON object, nothing else`;
+RULES:
+- Output ONLY valid JSON. No markdown, no code fences, no explanation.
+- skill_id must be kebab-case (lowercase with hyphens).
+- Each step must have a concrete shell command in args.command.
+- For file modifications, use sed, patch, or echo with redirection.
+- First step should always be diagnostic (run tests, check status).
+- Last step should summarize results.
+- Set requires_confirmation: true for destructive operations (file writes, deletions).
+- on_fail: "continue" for diagnostic steps, "stop" for critical steps.
+- risk_level: "low" for read-only, "medium" for file edits, "high" for system changes.
+- deny_globs must always include .env and .ssh/*.`;
 
-    const response = await c.chat.complete({
-        model: 'mistral-large-latest',
+    const response = await mistral.chat.complete({
+        model: SKILLSPEC_MODEL,
         messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Create a SkillSpec for the following user request:\n\n"${transcript}"` }
+            { role: 'user', content: `User said: "${transcript}"\n\nGenerate the SkillSpec JSON:` }
         ],
         responseFormat: { type: 'json_object' },
-        temperature: 0.1
+        temperature: 0.3,
+        maxTokens: 2000
     });
 
     const content = response.choices[0].message.content;
-    return JSON.parse(content);
+
+    try {
+        const skillSpec = JSON.parse(content);
+        return skillSpec;
+    } catch (e) {
+        // Try to extract JSON from response
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        throw new Error('Failed to parse SkillSpec JSON from Mistral response');
+    }
 }
 
 /**
- * Generate skill files (SKILL.md + run script + test) from a SkillSpec.
- * Uses Devstral / Codestral for code generation.
+ * Generate skill code files from a SkillSpec.
+ * Uses Codestral for high-quality code generation.
+ * Returns { files: [{ path, content }] }
  */
 export async function generateSkillCode(skillSpec) {
-    const c = getClient();
+    const mistral = getClient();
 
-    const systemPrompt = `You are a code generator for VibeForge. Given a SkillSpec JSON, generate the files needed for a Mistral Vibe Agent Skill.
+    const systemPrompt = `You are VibeForge Code Generator. Given a SkillSpec JSON, generate a complete Agent Skill folder with these files:
 
-You must return a JSON object with this structure:
+1. SKILL.md — Frontmatter (YAML) + documentation (Markdown)
+2. scripts/run.py — Python runner script
+3. tests/test_smoke.py — Smoke tests
+
+Output ONLY a JSON object with this structure:
 {
   "files": [
-    {
-      "path": "SKILL.md",
-      "content": "---\\nname: skill-name\\ndescription: ...\\nuser-invocable: true\\nallowed-tools:\\n  - bash\\n  - read_file\\n  - write_file\\n---\\n\\n# Skill Name\\n\\n## Description\\n...\\n\\n## Steps\\n..."
-    },
-    {
-      "path": "scripts/run.py",
-      "content": "#!/usr/bin/env python3\\n..."
-    },
-    {
-      "path": "tests/test_smoke.py",
-      "content": "#!/usr/bin/env python3\\n..."
-    }
+    { "path": "SKILL.md", "content": "---\\nname: ...\\n---\\n# ..." },
+    { "path": "scripts/run.py", "content": "#!/usr/bin/env python3\\n..." },
+    { "path": "tests/test_smoke.py", "content": "#!/usr/bin/env python3\\n..." }
   ]
 }
 
-Rules for SKILL.md:
-- Must have YAML frontmatter with: name, description, user-invocable: true, allowed-tools list
-- Must be compatible with Mistral Vibe skill discovery
-- Must include clear step descriptions
+SKILL.md FORMAT:
+---
+name: {skill_id}
+description: {description}
+user-invocable: true
+allowed-tools:
+  - bash
+  - read_file
+  - write_file
+---
+# /{invocation}
+## Description
+{description}
+## Steps
+1. **Step name** — \`command\`
+...
+## Safety
+- List safety measures
 
-Rules for scripts/run.py:
-- Must be a standalone Python script that implements all steps from the SkillSpec
-- Must accept --repo and --dry-run arguments via argparse
-- Must print clear status messages for each step
-- Must handle errors gracefully
-- Must use subprocess for running commands
-- Must NOT use any external Python packages beyond stdlib
+scripts/run.py FORMAT:
+- Accept --repo and --dry-run arguments
+- Implement each step from the SkillSpec
+- Print clear progress indicators
+- Handle errors gracefully
+- Return appropriate exit codes
 
-Rules for tests/test_smoke.py:
-- Must be a minimal pytest-compatible test
-- Must verify the script exists and is importable
-- Must test at least one key behavior
+tests/test_smoke.py FORMAT:
+- test_script_exists() — verify run.py exists
+- test_dry_run() — run script with --dry-run flag
+- Print test results
 
-Return ONLY the JSON object.`;
+RULES:
+- Output ONLY valid JSON
+- All file contents must be properly escaped strings
+- Python scripts must be executable and well-documented
+- Use subprocess for shell commands in run.py`;
 
-    const response = await c.chat.complete({
-        model: 'codestral-latest',
+    const response = await mistral.chat.complete({
+        model: CODEGEN_MODEL,
         messages: [
             { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Generate skill files for this SkillSpec:\n\n${JSON.stringify(skillSpec, null, 2)}` }
+            { role: 'user', content: `Generate skill folder for this SkillSpec:\n\n${JSON.stringify(skillSpec, null, 2)}` }
         ],
         responseFormat: { type: 'json_object' },
-        temperature: 0.1
+        temperature: 0.2,
+        maxTokens: 4000
     });
 
     const content = response.choices[0].message.content;
-    return JSON.parse(content);
+
+    try {
+        const result = JSON.parse(content);
+        return result;
+    } catch (e) {
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        throw new Error('Failed to parse skill code JSON from Codestral response');
+    }
 }
