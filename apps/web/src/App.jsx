@@ -24,6 +24,8 @@ function App() {
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
     const logEndRef = useRef(null);
+    const shadowTranscriptRef = useRef('');
+    const recognitionRef = useRef(null);
 
     useEffect(() => {
         if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -43,11 +45,35 @@ function App() {
     };
 
     // Voxtral Voice — record mic audio, send to Mistral for transcription
+    // FALLBACK: Run Web Speech API simultaneously in case Mistral rate limits us (429)
     const startVoxtralRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             audioChunksRef.current = [];
+            shadowTranscriptRef.current = '';
 
+            // 1. Start Shadow Transcriber (Web Speech API) as backup
+            try {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    const recognition = new SpeechRecognition();
+                    recognition.continuous = true;
+                    recognition.interimResults = true;
+                    recognition.onresult = (event) => {
+                        let currentShadow = '';
+                        for (let i = event.resultIndex; i < event.results.length; ++i) {
+                            currentShadow += event.results[i][0].transcript;
+                        }
+                        shadowTranscriptRef.current = currentShadow.trim();
+                    };
+                    recognition.start();
+                    recognitionRef.current = recognition;
+                }
+            } catch (e) {
+                console.warn("Shadow whisper failed to start", e);
+            }
+
+            // 2. Start Voxtral MediaRecorder
             // Helper function to create a WAV file from an AudioBuffer
             const bufferToWav = (abuffer, len) => {
                 let numOfChan = abuffer.numberOfChannels,
@@ -110,6 +136,10 @@ function App() {
 
             mediaRecorder.onstop = async () => {
                 stream.getTracks().forEach(track => track.stop());
+                if (recognitionRef.current) {
+                    try { recognitionRef.current.stop(); } catch (e) { }
+                }
+
                 const webmBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
 
                 if (webmBlob.size < 1000) {
@@ -146,8 +176,16 @@ function App() {
                     addLog('info', `✅ Voxtral transcription: "${data.transcript.slice(0, 80)}..."`);
                     setNarration(`Voice captured and transcribed by Mistral Voxtral. Edit if needed, then generate.`);
                 } catch (err) {
-                    addLog('error', '❌ Voxtral transcription failed: ' + err.message);
-                    setNarration('Transcription failed — type your command instead');
+                    const fallbackUsed = shadowTranscriptRef.current && shadowTranscriptRef.current.length > 5;
+                    addLog('error', '❌ Voxtral API error: ' + err.message);
+
+                    if (fallbackUsed) {
+                        addLog('info', '🛡️ Fallback engaged: Using browser local speech recognition instead');
+                        setTranscript(prev => prev + (prev ? ' ' : '') + shadowTranscriptRef.current);
+                        setNarration('Mistral rate limited. Used local fallback transcription!');
+                    } else {
+                        setNarration('Transcription failed — type your command instead');
+                    }
                 } finally {
                     setLoading('');
                 }
@@ -167,6 +205,9 @@ function App() {
     const stopVoxtralRecording = () => {
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop();
+        }
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch (e) { }
         }
         setRecording(false);
     };
