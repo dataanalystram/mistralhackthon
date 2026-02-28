@@ -1,0 +1,17 @@
+{
+  "name": "vibeforge-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ajv": "^8.17.1",
+    "uuid": "^10.0.0",
+    "@mistralai/mistralai": "^1.5.0"
+  }
+}
