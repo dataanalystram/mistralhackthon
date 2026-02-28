@@ -1,6 +1,7 @@
-// math.js — intentionally buggy: uses subtraction instead of addition
+// math.js — core math utilities
+
 function add(a, b) {
-    return a - b; // BUG: should be a + b
+    return a + b; // BUG: wrong operator
 }
 
 function subtract(a, b) {

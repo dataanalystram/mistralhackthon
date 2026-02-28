@@ -51,7 +51,7 @@ def main():
     # Step 3: Apply patch
     print("\n▶ Step 3: Applying fix...")
     # Fix: math.js has subtraction instead of addition
-    patch_cmd = 'sed -i.bak "s/return a - b/return a + b/g" src/math.js 2>/dev/null || sed -i "" "s/return a - b/return a + b/g" src/math.js'
+    patch_cmd = 'sed -i.bak "/BUG/s/return a - b/return a + b/" src/math.js 2>/dev/null || sed -i "" "/BUG/s/return a - b/return a + b/" src/math.js'
     code, _, _ = run_cmd(patch_cmd, repo, dry_run)
 
     # Step 4: Rerun tests

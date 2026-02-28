@@ -35,7 +35,7 @@ export const GOLDEN_PATHS = {
                     step_id: 'apply-patch',
                     name: 'Apply fix to the failing code',
                     tool: 'bash',
-                    args: { command: 'sed -i.bak "s/return a - b/return a + b/g" src/math.js 2>/dev/null || sed -i "" "s/return a - b/return a + b/g" src/math.js' },
+                    args: { command: 'sed -i.bak "/BUG/s/return a - b/return a + b/" src/math.js 2>/dev/null || sed -i "" "/BUG/s/return a - b/return a + b/" src/math.js' },
                     requires_confirmation: true,
                     on_fail: 'stop'
                 },
@@ -51,7 +51,7 @@ export const GOLDEN_PATHS = {
                     step_id: 'summarize',
                     name: 'Generate root cause summary',
                     tool: 'bash',
-                    args: { command: 'echo "✅ Root Cause: The add() function used subtraction (-) instead of addition (+). Fix applied to src/math.js. All tests now passing."' },
+                    args: { command: 'echo "✅ Root Cause: The add() function in src/math.js used subtraction (-) instead of addition (+). Patched the buggy line. All tests now passing."' },
                     requires_confirmation: false,
                     on_fail: 'stop'
                 }
@@ -148,7 +148,7 @@ def main():
     # Step 3: Apply patch
     print("\\n▶ Step 3: Applying fix...")
     # Fix: math.js has subtraction instead of addition
-    patch_cmd = 'sed -i.bak "s/return a - b/return a + b/g" src/math.js 2>/dev/null || sed -i "" "s/return a - b/return a + b/g" src/math.js'
+    patch_cmd = 'sed -i.bak "/BUG/s/return a - b/return a + b/" src/math.js 2>/dev/null || sed -i "" "/BUG/s/return a - b/return a + b/" src/math.js'
     code, _, _ = run_cmd(patch_cmd, repo, dry_run)
 
     # Step 4: Rerun tests
