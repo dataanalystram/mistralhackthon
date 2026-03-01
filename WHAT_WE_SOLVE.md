@@ -12,7 +12,7 @@
 
 Imagine you're Alex, a developer at a startup. It's 11 PM. CI is red. Slack is pinging.
 
-```
+```text
 ❌ CI FAILED — 2 tests failing in math.js
    add(2, 3) expected 5, got -1
 ```
@@ -47,9 +47,9 @@ A **real artifact** — code-reviewable, testable, installable.
 
 ## ⚡ What VibeForge Does (In 60 Seconds)
 
-```
+```text
                           ┌─────────────────┐
-  🎤 "Fix my CI"  ──────▶│   VibeForge     │
+   💬 "Fix my CI" ──────▶│   VibeForge     │
                           │                 │
                           │  1. Understand  │──▶ SkillSpec (JSON)
                           │  2. Generate    │──▶ SKILL.md + run.py + tests
@@ -61,13 +61,13 @@ A **real artifact** — code-reviewable, testable, installable.
 
 ### Step-by-Step: A Real Run
 
-**You say:** *"Create /fix-ci that runs tests, finds failures, patches the code, reruns tests"*
+**You type:** *"Create /fix-ci that runs tests, finds failures, patches the code, reruns tests"*
 
 **VibeForge does:**
 
 | Step | What Happens | Output |
 |:---:|:---|:---|
-| 📋 | **Mistral Large** analyzes your intent | A strict JSON SkillSpec (not free-form text!) |
+| 📋 | **Mistral Large 3** analyzes your intent | A strict JSON SkillSpec (not free-form text!) |
 | 📁 | **Codestral** generates a skill folder | `SKILL.md` + `scripts/run.py` + `tests/test_smoke.py` |
 | 📦 | Skill is installed to your repo | `.vibe/skills/fix-ci/` (git-trackable) |
 | ▶️ | Skill executes in a sandboxed runner | Tests fail → Bug found → Patch applied → Tests pass |
@@ -79,25 +79,20 @@ A **real artifact** — code-reviewable, testable, installable.
 
 ## 🌍 Real-World Scenarios VibeForge Handles
 
-### 1. `/fix-ci` — Fix Failing Tests
+### 1. `/feature` — Intelligently Suggest Next Features
+> **Who:** Product owners, solo devs
+> **What:** Reads the `package.json`, views `TODO` tags, and analyzes `git log` dynamically to suggest the top 3 highest ROI automated features to build next.
+> **Why it matters:** It reads your context before you even ask.
+
+### 2. `/fix-ci` — Fix Failing Tests
 > **Who:** Every dev who gets paged at 2 AM
 > **What:** Runs tests → finds failing output → patches the code → reruns → summarizes root cause
 > **Why it matters:** The fix becomes a reusable automation, not a one-off chat message
 
-### 2. `/ship-demo` — Prepare for Demo Day
+### 3. `/ship-demo` — Prepare for Demo Day
 > **Who:** Anyone shipping a demo or release
 > **What:** Runs test suite → gathers git log → generates release notes
 > **Why it matters:** Consistent, repeatable release process every time
-
-### 3. `/audit-deps` — Check Dependencies *(future)*
-> **Who:** Security teams, compliance officers
-> **What:** Scans package.json → checks for known CVEs → generates report
-> **Why it matters:** Automated security that lives in the repo
-
-### 4. `/onboard-dev` — New Developer Setup *(future)*
-> **Who:** New team members on day 1
-> **What:** Checks prerequisites → sets up env → runs first build → verifies
-> **Why it matters:** Zero-friction onboarding, every time
 
 ---
 
@@ -145,47 +140,46 @@ A **real artifact** — code-reviewable, testable, installable.
 
 ## 🏗️ How It's Built (Technical)
 
-```
-You speak ──▶ Web Speech API ──▶ Transcript
-                                     │
-                     ┌───────────────┘
-                     ▼
-              Mistral Large 3
-              (json_object mode)
-                     │
-                     ▼
-              SkillSpec (JSON)  ◀── Ajv Schema Validation
-                     │
-                     ▼
-              Codestral
-              (code generation)
-                     │
-                     ▼
-              Skill Folder
-              ├── SKILL.md
-              ├── scripts/run.py
-              └── tests/test_smoke.py
-                     │
-                     ▼
-              .vibe/skills/fix-ci/  ◀── Installed to repo
-                     │
-                     ▼
-              Sandbox Runner
-              ├── Timeout (60s/step)
-              ├── Secret masking
-              ├── DRY_RUN mode
-              └── Immutable logs
-                     │
-                     ▼
-              ✅ Tests Green
-              📋 Root Cause Summary
+```text
+You type ─────────▶ Context Analyzer ──────▶ Transcript
+                                              │
+                      ┌───────────────────────┘
+                      ▼
+               Mistral Large 3
+               (json_object mode)
+                      │
+                      ▼
+               SkillSpec (JSON)  ◀── Ajv Schema Validation
+                      │
+                      ▼
+               Codestral
+               (code generation)
+                      │
+                      ▼
+               Skill Folder
+               ├── SKILL.md
+               ├── scripts/run.py
+               └── tests/test_smoke.py
+                      │
+                      ▼
+               .vibe/skills/fix-ci/  ◀── Installed to target repo
+                      │
+                      ▼
+               Sandbox Runner
+               ├── Timeout (60s/step)
+               ├── Secret masking
+               ├── DRY_RUN mode
+               └── Immutable logs
+                      │
+                      ▼
+               ✅ Tests Green
+               📋 Root Cause Summary
 ```
 
 | Technology | Role |
 |:---|:---|
 | **Mistral Large** (`mistral-large-latest`) | Understands user intent → produces strict JSON SkillSpec |
-| **Codestral** (`codestral-latest`) | Generates multi-file skill code (SKILL.md + scripts + tests) |
-| **Web Speech API** | Free, real-time voice input in the browser |
+| **Codestral** (`codestral-latest`) | Generates multi-file python skill code (SKILL.md + scripts + tests) |
 | **Ajv JSON Schema** | Validates every SkillSpec — no ambiguity allowed |
 | **Node.js Sandbox** | Executes with timeout, secret masking, DRY_RUN |
 | **React + Vite** | Premium dark UI with real-time log streaming |
@@ -200,13 +194,13 @@ You speak ──▶ Web Speech API ──▶ Transcript
 > When VibeForge fixes your bug, it creates a **reusable skill** that lives in your repo,
 > can be code-reviewed, tested, and run by any teammate, forever.
 >
-> **VibeForge doesn't replace developers. It lets them build their own AI-powered tools — with voice.**
+> **VibeForge doesn't replace developers. It lets them build their own AI-powered tools.**
 
 ---
 
 ## 🏆 Why This Wins
 
-1. **Voice-First** — Speak a workflow, don't type a prompt
+1. **Context-Aware** — Give it your repo and it reads the context for you. 
 2. **Durable Artifacts** — Skills are real files, not chat messages
 3. **Strict Schemas** — JSON validation, not free-form hope
 4. **Safety by Design** — Allowlists, sandboxing, DRY_RUN, secret masking
@@ -219,6 +213,6 @@ You speak ──▶ Web Speech API ──▶ Transcript
 
 *"Stop re-prompting. Start forging skills."*
 
-**⚡ VibeForge — Built for the Mistral Worldwide Hackathon 2026 ⚡**
+**⚡ VibeForge — Built by Ramprasad Somaraju for the Mistral Worldwide Hackathon 2026 ⚡**
 
 </div>
